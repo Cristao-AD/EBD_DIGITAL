@@ -419,7 +419,7 @@ const auth = getAuth(app);
               <h3 class="member-name">${escapeHtml(p.nome)}</h3>
               ${p.classe ? `<p class="member-class">${escapeHtml(p.classe)}</p>` : ""}
             </div>
-            <span class="talent-badge"><span>🪙</span> ${p.talentos}</span>
+            <span class="talent-badge"><span>💰</span> ${p.talentos}</span>
           </div>
           <div class="member-actions">
             <a class="btn btn-outline" href="#/app/participante/${p.id}">Ver Perfil</a>
@@ -433,7 +433,7 @@ const auth = getAuth(app);
             <h3 class="member-name">${escapeHtml(p.nome)}</h3>
             ${p.classe ? `<p class="member-class">${escapeHtml(p.classe)}</p>` : ""}
           </div>
-          <span class="talent-badge"><span>🪙</span> ${p.talentos}</span>
+          <span class="talent-badge"><span>💰</span> ${p.talentos}</span>
         </div>
         <div class="member-actions">
           <button class="btn ${jaPresente ? "btn-success" : ""}" data-presenca="${p.id}" ${jaPresente ? "disabled" : ""}>
@@ -483,39 +483,56 @@ const auth = getAuth(app);
   }
 
   function viewMembros() {
-    const s = Store.get();
-    const filtroQ = (sessionStorage.getItem("q-membros") || "");
-    const list = [...s.participantes].sort((a, b) => a.nome.localeCompare(b.nome))
-      .filter((p) => p.nome.toLowerCase().includes(filtroQ.toLowerCase()));
-    const isAdmin = s.isAdmin;
-
-    let listHTML;
-    if (isAdmin) {
-      listHTML = list.length ? `<div class="row-gap">${list.map((p) => memberCardHTML(p, true)).join("")}</div>` : `<p class="empty">Sem resultados.</p>`;
-    } else {
-      listHTML = list.length ? `<div class="member-list">${list.map((p) => `
-        <div class="row">
-          <div style="min-width:0">
-            <div class="nm">${escapeHtml(p.nome)}</div>
-            ${p.classe ? `<div class="cl">${escapeHtml(p.classe)}</div>` : ""}
-          </div>
-          <span class="talent-badge"><span>🪙</span> ${p.talentos}</span>
-        </div>`).join("")}</div>` : `<p class="empty">Sem resultados.</p>`;
-    }
-
     renderAppShell("/app/membros", `
       <div class="row-gap">
-        <h1 class="section-title">Membros</h1>
         <div class="search-wrap">
-          <span class="icon-search">${ICONS.search}</span>
-          <input id="q" class="input pl-icon" placeholder="Pesquisar..." value="${escapeHtml(filtroQ)}" />
+          <span class="icon-search" style="position: absolute; top: 50%; left: 0.75rem; transform: translateY(-50%); color: var(--muted-foreground);">${ICONS.search}</span>
+          <input id="search-input" type="text" class="input" placeholder="Pesquisar..." autocomplete="off" style="padding-left: 2.25rem;" />
         </div>
-        ${listHTML}
+        
+        <div class="member-list">
+          <div id="lista-membros-container" style="display: contents;"></div>
+        </div>
       </div>
     `);
-    const q = document.getElementById("q");
-    q.oninput = () => { sessionStorage.setItem("q-membros", q.value); render(); q.focus(); q.setSelectionRange(q.value.length, q.value.length); };
-    attachMemberCardHandlers(document);
+
+    const searchInput = document.getElementById("search-input");
+    const container = document.getElementById("lista-membros-container");
+
+    const filtrarEGRenderizarLayoutOriginal = () => {
+      const termo = searchInput.value.toLowerCase().trim();
+      const s = Store.get();
+      
+      const filtrados = s.participantes.filter(p => 
+        p.nome.toLowerCase().includes(termo)
+      );
+
+      if (filtrados.length === 0) {
+        container.innerHTML = `<p class="empty">Sem resultados.</p>`;
+        return;
+      }
+
+      // 🎨 RENDERIZAÇÃO PERFEITA:
+      // Usamos a classe .row (do seu CSS) em vez de .card para os membros grudarem com a linha divisória sutil
+      container.innerHTML = filtrados.map(p => `
+        <div class="row" onclick="navigate('/app/participante?id=${p.id}')" style="cursor: pointer;">
+          <div>
+            <div class="nm">${escapeHtml(p.nome)}</div>
+            <div class="cl">${escapeHtml(p.classe || "Adultos")}</div>
+          </div>
+          <div class="talent-badge">
+            <span>💰</span>
+            <span>${p.talentos}</span>
+          </div>
+        </div>
+      `).join("");
+    };
+
+    // Inicializa a lista
+    filtrarEGRenderizarLayoutOriginal();
+
+    // Mantém o input intacto e o teclado aberto ao digitar
+    searchInput.addEventListener("input", filtrarEGRenderizarLayoutOriginal);
   }
 
   function viewCadastro() {
@@ -536,7 +553,7 @@ const auth = getAuth(app);
             </select>
           </div>
           <div class="field">
-            <label for="talentos"><span class="label-talent-icon">${ICONS.coins}</span>Talentos iniciais <span class="muted">(Opcional)</span></label>
+            <label for="talentos"><span class="label-talent-icon"><span>💰</span></span>Talentos iniciais <span class="muted">(Opcional)</span></label>
             <input id="talentos" type="number" min="0" class="input field-talent" placeholder="0" />
           </div>
           <button type="submit" class="btn btn-md">${ICONS.save} Salvar</button>
@@ -563,8 +580,8 @@ const auth = getAuth(app);
       <div class="row-gap">
         <div class="title-row">${ICONS.chart}<h1 class="section-title">Relatórios</h1></div>
         <div class="grid-2">
-          <div class="stat-card"><div class="stat-icon talent">${ICONS.coins}</div><div class="stat-value">${totalTal}</div><div class="stat-label">Talentos</div></div>
-          <div class="stat-card"><div class="stat-icon flame">${ICONS.trophy}</div><div class="stat-value">${s.participantes.length}</div><div class="stat-label">Membros</div></div>
+          <div class="stat-card"><div class="stat-icon talent"><span>💰</span></div><div class="stat-value">${totalTal}</div><div class="stat-label">Talentos</div></div>
+          <div class="stat-card"><div class="stat-icon flame">${ICONS.users}</div><div class="stat-value">${s.participantes.length}</div><div class="stat-label">Membros</div></div>
         </div>
         <div class="card section-card">
           <h2>🏆 Mais Talentos</h2>
@@ -575,7 +592,7 @@ const auth = getAuth(app);
                   <span class="report-pos">${i + 1}</span>
                   <span class="report-name">${escapeHtml(p.nome)}</span>
                 </div>
-                <span class="report-val">${p.talentos} 🪙</span>
+                <span class="report-val">${p.talentos} 💰</span>
               </div>`).join("")}
           </div>
         </div>
@@ -651,7 +668,7 @@ const auth = getAuth(app);
           <div class="avatar">${ICONS.avatar}</div>
           <div>${headHTML}</div>
           <div class="profile-stats">
-            <div class="tn">🪙 ${p.talentos}</div>
+            <div class="tn">${ICONS.coins} ${p.talentos}</div>
             <div class="lb">Talentos</div>
           </div>
         </div>

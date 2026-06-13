@@ -1,4 +1,38 @@
-/* EBD Digital - Vanilla JS app */
+/* EBD Digital - Vanilla JS app com Firebase Auth */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { 
+  getFirestore, 
+  collection, 
+  getDocs, 
+  addDoc, 
+  updateDoc, 
+  doc, 
+  deleteDoc,
+  runTransaction 
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+// 1. IMPORTA O MÓDULO DE AUTENTICAÇÃO:
+import { 
+  getAuth, 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged 
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCvLX2ywG4N-jNdXDHtTZCpmibhc397FKw",
+  authDomain: "ebd-digital-bc9da.firebaseapp.com",
+  projectId: "ebd-digital-bc9da",
+  storageBucket: "ebd-digital-bc9da.firebasestorage.app",
+  messagingSenderId: "249730740857",
+  appId: "1:249730740857:web:4e578c6a6ff36c38931aa8"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+// 2. INICIALIZA O COFRE DE AUTENTICAÇÃO:
+const auth = getAuth(app);
+
+
 (function () {
   "use strict";
 
@@ -28,105 +62,209 @@
 
   const CLASSES = ["Crianças", "Jovens", "Adultos"];
   const MOTIVOS = ["Presença EBD", "Participação", "Leitura Bíblica", "Memorização de Versículo", "Oferta Missionária", "Outro"];
-  const STORAGE_KEY = "ebd-talentos-v1";
-  const ADMIN_PASS = "ebd321";
 
-  // ============ Store ============
-  const uid = () => Math.random().toString(36).slice(2, 10);
   const todayStr = () => new Date().toISOString().slice(0, 10);
 
-  function defaultState() {
-  return {
-    participantes: [
-      { id: uid(), nome: "Aldeon", classe: "Adultos", talentos: 46, criadoEm: new Date().toISOString() },
-      { id: uid(), nome: "Antonia", classe: "Adultos", talentos: 57, criadoEm: new Date().toISOString() },
-      { id: uid(), nome: "Cleonisse", classe: "Adultos", talentos: 46, criadoEm: new Date().toISOString() },
-      { id: uid(), nome: "Danilo", classe: "Adultos", talentos: 29, criadoEm: new Date().toISOString() },
-      { id: uid(), nome: "Diego", classe: "Adultos", talentos: 48, criadoEm: new Date().toISOString() },
-      { id: uid(), nome: "Edineia", classe: "Adultos", talentos: 36, criadoEm: new Date().toISOString() },
-      { id: uid(), nome: "Esther", classe: "Adultos", talentos: 43, criadoEm: new Date().toISOString() },
-      { id: uid(), nome: "Giovana", classe: "Adultos", talentos: 32, criadoEm: new Date().toISOString() },
-      { id: uid(), nome: "Jivanilde", classe: "Adultos", talentos: 30, criadoEm: new Date().toISOString() },
-      { id: uid(), nome: "Joel", classe: "Adultos", talentos: 30, criadoEm: new Date().toISOString() },
-      { id: uid(), nome: "Joelma", classe: "Adultos", talentos: 57, criadoEm: new Date().toISOString() },
-      { id: uid(), nome: "Josifran", classe: "Adultos", talentos: 32, criadoEm: new Date().toISOString() },
-      { id: uid(), nome: "Jozimos", classe: "Adultos", talentos: 57, criadoEm: new Date().toISOString() },
-      { id: uid(), nome: "Kleydson", classe: "Adultos", talentos: 57, criadoEm: new Date().toISOString() },
-      { id: uid(), nome: "Miguel", classe: "Adultos", talentos: 36, criadoEm: new Date().toISOString() },
-      { id: uid(), nome: "Pedro Henrique", classe: "Adultos", talentos: 45, criadoEm: new Date().toISOString() },
-      { id: uid(), nome: "Pedro Ramos", classe: "Adultos", talentos: 48, criadoEm: new Date().toISOString() },
-      { id: uid(), nome: "Priscila", classe: "Adultos", talentos: 29, criadoEm: new Date().toISOString() },
-      { id: uid(), nome: "Ruth", classe: "Adultos", talentos: 18, criadoEm: new Date().toISOString() },
-      { id: uid(), nome: "Samia", classe: "Crianças", talentos: 48, criadoEm: new Date().toISOString() }
-    ],
+  // Cache em memória (ADMIN_PASS removido daqui!)
+  let state = {
+    participantes: [],
     presencas: [],
     movimentacoes: [],
-    isAdmin: false,
+    isAdmin: false, 
   };
-}
 
-  function loadState() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return defaultState();
-      const parsed = JSON.parse(raw);
-      return Object.assign(defaultState(), parsed.state || parsed);
-    } catch { return defaultState(); }
-  }
+  // Escuta em tempo real se o usuário está logado no Firebase ou não
+  onAuthStateChanged(auth, (user) => {
+    state.isAdmin = !!user;
+    // Força a renderização da tela atual para se adaptar ao novo estado de login
+    if (typeof render === "function") render();
+  });
 
-  let state = loadState();
-
-  function persist() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ state }));
-  }
-
+  // ============ Store (Sincronizado com Firebase Auth) ============
   const Store = {
     get: () => state,
-    login(senha) {
-      if (senha === ADMIN_PASS) { state.isAdmin = true; persist(); return true; }
-      return false;
+    
+    async sync() {
+      try {
+        const partSnap = await getDocs(collection(db, "participantes"));
+        state.participantes = partSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+
+        const presSnap = await getDocs(collection(db, "presencas"));
+        state.presencas = presSnap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+
+        const movSnap = await getDocs(collection(db, "movimentacoes"));
+        state.movimentacoes = movSnap.docs.map(d => Object.assign({ id: d.id }, d.data()))
+                                      .sort((a,b) => new Date(b.data) - new Date(a.data));
+      } catch (err) {
+        console.error("Erro ao sincronizar dados:", err);
+      }
     },
-    logout() { state.isAdmin = false; persist(); },
-    addParticipante(p) {
-      state.participantes.push({
-        id: uid(), nome: p.nome, classe: p.classe,
-        talentos: p.talentos || 0, criadoEm: new Date().toISOString(),
-      });
-      persist();
+
+    // Realiza o login real no Firebase usando e-mail e senha
+    async login(email, senha) {
+      try {
+        await signInWithEmailAndPassword(auth, email, senha);
+        return { ok: true };
+      } catch (error) {
+        let msg = "Erro ao fazer login.";
+        if (error.code === "auth/wrong-password" || error.code === "auth/user-not-found" || error.code === "auth/invalid-credential") {
+          msg = "E-mail ou senha incorretos.";
+        } else if (error.code === "auth/invalid-email") {
+          msg = "Formato de e-mail inválido.";
+        }
+        return { ok: false, msg };
+      }
     },
-    updateParticipante(id, patch) {
-      state.participantes = state.participantes.map((p) => p.id === id ? Object.assign({}, p, patch) : p);
-      persist();
+
+    // Faz o logout real no Firebase
+    async logout() { 
+      await signOut(auth);
     },
-    removeParticipante(id) {
-      state.participantes = state.participantes.filter((p) => p.id !== id);
-      state.presencas = state.presencas.filter((x) => x.participanteId !== id);
-      state.movimentacoes = state.movimentacoes.filter((x) => x.participanteId !== id);
-      persist();
+
+    async addParticipante(p) {
+      const novo = {
+        nome: p.nome,
+        classe: p.classe || "",
+        talentos: p.talentos || 0,
+        criadoEm: new Date().toISOString()
+      };
+      await addDoc(collection(db, "participantes"), novo);
+      await this.sync();
     },
-    registrarPresenca(id) {
+
+    async updateParticipante(id, patch) {
+      const docRef = doc(db, "participantes", id);
+      await updateDoc(docRef, patch);
+      await this.sync();
+    },
+
+    async removeParticipante(id) {
+      await deleteDoc(doc(db, "participantes", id));
+      await this.sync();
+    },
+
+    async registrarPresenca(id) {
       const d = todayStr();
       if (state.presencas.some((p) => p.participanteId === id && p.data === d)) {
         return { ok: false, msg: "Presença já registrada hoje." };
       }
-      state.presencas.push({ id: uid(), participanteId: id, data: d });
-      state.movimentacoes.unshift({ id: uid(), participanteId: id, tipo: "presenca", quantidade: 1, motivo: "Presença EBD", data: new Date().toISOString(), responsavel: "Sistema" });
-      const p = state.participantes.find((x) => x.id === id);
-      if (p) p.talentos += 1;
-      persist();
-      return { ok: true, msg: "Presença registrada! +1 Talento Digital." };
+
+      try {
+        await runTransaction(db, async (transaction) => {
+          const pRef = doc(db, "participantes", id);
+          const pDoc = await transaction.get(pRef);
+          if (!pDoc.exists()) throw "Participante não existe!";
+
+          const novosTalentos = (pDoc.data().talentos || 0) + 1;
+          transaction.update(pRef, { talentos: novosTalentos });
+
+          const novaPresencaRef = doc(collection(db, "presencas"));
+          transaction.set(novaPresencaRef, { participanteId: id, data: d });
+
+          const novaMovRef = doc(collection(db, "movimentacoes"));
+          transaction.set(novaMovRef, {
+            participanteId: id,
+            tipo: "presenca",
+            quantidade: 1,
+            motivo: "Presença EBD",
+            data: new Date().toISOString(),
+            responsavel: "Sistema"
+          });
+        });
+
+        await this.sync();
+        return { ok: true, msg: "Presença registrada! +1 Talento Digital." };
+      } catch (e) {
+        return { ok: false, msg: "Erro ao registrar: " + e };
+      }
     },
-    adicionarTalentos(id, qtd, motivo) {
-      const p = state.participantes.find((x) => x.id === id);
-      if (p) p.talentos += qtd;
-      state.movimentacoes.unshift({ id: uid(), participanteId: id, tipo: "adicao", quantidade: qtd, motivo, data: new Date().toISOString(), responsavel: "Sistema" });
-      persist();
+
+    // 🔄 NOVA FUNÇÃO PARA CANCELAR A PRESENÇA DO DIA
+    async cancelarPresenca(id) {
+      const d = todayStr();
+      const presencaHoje = state.presencas.find((p) => p.participanteId === id && p.data === d);
+      
+      if (!presencaHoje) {
+        return { ok: false, msg: "Nenhuma presença registrada hoje para remover." };
+      }
+
+      try {
+        await runTransaction(db, async (transaction) => {
+          const pRef = doc(db, "participantes", id);
+          const pDoc = await transaction.get(pRef);
+          if (!pDoc.exists()) throw "Participante não existe!";
+
+          // Remove 1 talento que havia sido ganho pela presença
+          const novosTalentos = Math.max(0, (pDoc.data().talentos || 0) - 1);
+          transaction.update(pRef, { talentos: novosTalentos });
+
+          // Deleta o registro de presença do dia de hoje
+          const presencaRef = doc(db, "presencas", presencaHoje.id);
+          transaction.delete(presencaRef);
+
+          // Registra o estorno no histórico de movimentações
+          const novaMovRef = doc(collection(db, "movimentacoes"));
+          transaction.set(novaMovRef, {
+            participanteId: id,
+            tipo: "remocao",
+            quantidade: 1,
+            motivo: "Cancelamento de Presença",
+            data: new Date().toISOString(),
+            responsavel: "Sistema"
+          });
+        });
+
+        await this.sync();
+        return { ok: true, msg: "Presença cancelada e 1 talento estornado!" };
+      } catch (e) {
+        return { ok: false, msg: "Erro ao cancelar: " + e };
+      }
     },
-    removerTalentos(id, qtd, motivo) {
-      const p = state.participantes.find((x) => x.id === id);
-      if (p) p.talentos = Math.max(0, p.talentos - qtd);
-      state.movimentacoes.unshift({ id: uid(), participanteId: id, tipo: "remocao", quantidade: qtd, motivo, data: new Date().toISOString(), responsavel: "Sistema" });
-      persist();
+
+    async adicionarTalentos(id, qtd, motivo) {
+      try {
+        await runTransaction(db, async (transaction) => {
+          const pRef = doc(db, "participantes", id);
+          const pDoc = await transaction.get(pRef);
+          const novosTalentos = (pDoc.data().talentos || 0) + qtd;
+          
+          transaction.update(pRef, { talentos: novosTalentos });
+          
+          const novaMovRef = doc(collection(db, "movimentacoes"));
+          transaction.set(novaMovRef, {
+            participanteId: id,
+            tipo: "adicao",
+            quantidade: qtd,
+            motivo,
+            data: new Date().toISOString(),
+            responsavel: "Sistema"
+          });
+        });
+        await this.sync();
+      } catch (e) { console.error(e); }
+    },
+
+    async removerTalentos(id, qtd, motivo) {
+      try {
+        await runTransaction(db, async (transaction) => {
+          const pRef = doc(db, "participantes", id);
+          const pDoc = await transaction.get(pRef);
+          const novosTalentos = Math.max(0, (pDoc.data().talentos || 0) - qtd);
+          
+          transaction.update(pRef, { talentos: novosTalentos });
+          
+          const novaMovRef = doc(collection(db, "movimentacoes"));
+          transaction.set(novaMovRef, {
+            participanteId: id,
+            tipo: "remocao",
+            quantidade: qtd,
+            motivo,
+            data: new Date().toISOString(),
+            responsavel: "Sistema"
+          });
+        });
+        await this.sync();
+      } catch (e) { console.error(e); }
     },
   };
 
@@ -146,8 +284,7 @@
 
   // ============ Router (hash-based) ============
   function parseRoute() {
-    const hash = location.hash.replace(/^#/, "") || "/";
-    return hash;
+    return location.hash.replace(/^#/, "") || "/";
   }
   function navigate(path) {
     location.hash = path;
@@ -186,7 +323,7 @@
           </div>
           <div class="actions">
             <button class="btn btn-lg" id="btn-participante">${ICONS.user} Sou Participante</button>
-            <button class="btn btn-outline btn-lg" id="btn-admin">${ICONS.shield} Sou Administrador</button>
+            <button class="btn btn-outline btn-lg" id="btn-admin">${ICONS.shield} Sou Administrador(a)</button>
           </div>
         </div>
       </div>
@@ -197,7 +334,7 @@
 
   function openAdminModal() {
     openModal(`
-      <div class="modal-title">${ICONS.shield} Acesso Administrador</div>
+      <div class="modal-title">${ICONS.shield} Acesso Administrador(a)</div>
       <div class="modal-body">
         <label class="label-small">Digite a senha para continuar:</label>
         <div class="password-wrap">
@@ -210,19 +347,34 @@
       const inp = modal.querySelector("#adm-pass");
       const eye = modal.querySelector("#eye-toggle");
       let show = false;
+      
       eye.onclick = () => { show = !show; inp.type = show ? "text" : "password"; eye.innerHTML = show ? ICONS.eyeOff : ICONS.eye; };
-      const submit = () => {
-        if (Store.login(inp.value)) {
-          closeModal(); toast.success("Bem-vindo, Administrador!"); navigate("/app");
-        } else toast.error("Senha incorreta");
+      
+      const submit = async () => {
+        const emailFixo = "danilolex5@gmail.com";
+        const senha = inp.value;
+        
+        if (!senha) return toast.error("Digite a senha.");
+        
+        toast("Autenticando...");
+        // Envia o e-mail fixo oculto + a senha digitada
+        const r = await Store.login(emailFixo, senha);
+        
+        if (r.ok) {
+          closeModal(); 
+          toast.success("Bem-vindo, Administrador(a)!"); 
+          navigate("/app");
+        } else {
+          toast.error(r.msg);
+        }
       };
+      
       modal.querySelector("#adm-enter").onclick = submit;
       inp.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
       setTimeout(() => inp.focus(), 50);
     });
   }
 
-  // ---- App shell ----
   function renderAppShell(currentPath, contentHTML) {
     const isAdmin = Store.get().isAdmin;
     const items = [
@@ -294,15 +446,14 @@
 
   function attachMemberCardHandlers(container) {
     container.querySelectorAll("[data-presenca]").forEach((btn) => {
-      btn.onclick = () => {
-        const r = Store.registrarPresenca(btn.dataset.presenca);
+      btn.onclick = async () => {
+        const r = await Store.registrarPresenca(btn.dataset.presenca);
         r.ok ? toast.success(r.msg) : toast.warning(r.msg);
         render();
       };
     });
   }
 
-  // ---- /app (início) ----
   function viewInicio() {
     const s = Store.get();
     const filtroQ = (sessionStorage.getItem("q-inicio") || "");
@@ -331,7 +482,6 @@
     attachMemberCardHandlers(document);
   }
 
-  // ---- /app/membros ----
   function viewMembros() {
     const s = Store.get();
     const filtroQ = (sessionStorage.getItem("q-membros") || "");
@@ -368,7 +518,6 @@
     attachMemberCardHandlers(document);
   }
 
-  // ---- /app/cadastro ----
   function viewCadastro() {
     if (!Store.get().isAdmin) { navigate("/app/membros"); return; }
     renderAppShell("/app/cadastro", `
@@ -394,19 +543,18 @@
         </form>
       </div>
     `);
-    document.getElementById("form-cad").onsubmit = (e) => {
+    document.getElementById("form-cad").onsubmit = async (e) => {
       e.preventDefault();
       const nome = document.getElementById("nome").value.trim();
       if (!nome) return toast.error("Informe o nome completo.");
       const classe = document.getElementById("classe").value || undefined;
       const t = parseInt(document.getElementById("talentos").value, 10);
-      Store.addParticipante({ nome, classe, talentos: isNaN(t) ? 0 : Math.max(0, t) });
+      await Store.addParticipante({ nome, classe, talentos: isNaN(t) ? 0 : Math.max(0, t) });
       toast.success("Participante cadastrado!");
       navigate("/app");
     };
   }
 
-  // ---- /app/relatorios ----
   function viewRelatorios() {
     const s = Store.get();
     const top = [...s.participantes].sort((a, b) => b.talentos - a.talentos).slice(0, 5);
@@ -435,7 +583,6 @@
     `);
   }
 
-  // ---- /app/participante/:id ----
   function viewPerfil(id) {
     const s = Store.get();
     const p = s.participantes.find((x) => x.id === id);
@@ -444,7 +591,9 @@
       return;
     }
     const isAdmin = s.isAdmin;
-    const movs = s.movimentacoes.filter((m) => m.participanteId === id && m.tipo !== "presenca");
+    
+    // Captura TODAS as movimentações do membro (incluindo as de presença agora)
+    const movs = s.movimentacoes.filter((m) => m.participanteId === id);
     const jaPresente = s.presencas.some((x) => x.participanteId === id && x.data === todayStr());
 
     const headHTML = isAdmin ? `
@@ -461,12 +610,19 @@
       ${p.classe ? `<span class="classe-pill">${escapeHtml(p.classe)}</span>` : ""}
     `;
 
+    // Se já estiver presente, mostra o botão vermelho de CANCELAR, senão mostra o de REGISTRAR
     const actionsHTML = isAdmin ? `
       <div class="action-block">
-        <button id="btn-presenca" class="btn ${jaPresente ? "btn-success" : ""}" ${jaPresente ? "disabled" : ""}>
-          ${ICONS.check} ${jaPresente ? "Presença Confirmada" : "Registrar Presença (+1 Talento)"}
-        </button>
-        <div class="grid-2">
+        ${jaPresente ? `
+          <button id="btn-cancelar-presenca" class="btn btn-destructive" style="background-color: #dc2626; color: white;">
+            ❌ Cancelar Presença Confirmada
+          </button>
+        ` : `
+          <button id="btn-presenca" class="btn">
+            ${ICONS.check} Registrar Presença (+1 Talento)
+          </button>
+        `}
+        <div class="grid-2" style="margin-top: 10px;">
           <button id="btn-add" class="btn btn-flame">${ICONS.plus} Adicionar Talentos</button>
           <button id="btn-rem" class="btn btn-outline-danger">${ICONS.minus} Remover Talentos</button>
         </div>
@@ -513,32 +669,63 @@
       const pencil = document.getElementById("btn-pencil");
       let unlocked = false;
       pencil.onclick = () => { unlocked = true; nomeInp.readOnly = false; nomeInp.classList.add("unlocked"); nomeInp.focus(); nomeInp.setSelectionRange(nomeInp.value.length, nomeInp.value.length); };
-      const salvar = () => {
+      
+      const salvar = async () => {
         const nv = nomeInp.value.trim();
         if (!nv) { nomeInp.value = p.nome; }
-        else if (nv !== p.nome) { Store.updateParticipante(id, { nome: nv }); toast.success("Nome atualizado"); }
+        else if (nv !== p.nome) { 
+          await Store.updateParticipante(id, { nome: nv }); 
+          toast.success("Nome updated"); 
+          // Re-sincroniza e redesenha a tela para atualizar o nome no topo
+          await Store.sync();
+          viewPerfil(id);
+        }
         unlocked = false; nomeInp.readOnly = true; nomeInp.classList.remove("unlocked");
       };
       nomeInp.onblur = salvar;
       nomeInp.onkeydown = (e) => { if (e.key === "Enter") nomeInp.blur(); };
-      document.getElementById("edit-classe").onchange = (e) => {
-        Store.updateParticipante(id, { classe: e.target.value || undefined });
+      
+      document.getElementById("edit-classe").onchange = async (e) => {
+        await Store.updateParticipante(id, { classe: e.target.value || "" });
         toast.success("Classe atualizada");
+        await Store.sync();
+        viewPerfil(id);
       };
-      document.getElementById("btn-presenca").onclick = () => {
-        const r = Store.registrarPresenca(id);
-        r.ok ? toast.success(r.msg) : toast.warning(r.msg);
-        render();
-      };
-      document.getElementById("btn-add").onclick = () => openTalentDialog("add", id);
-      document.getElementById("btn-rem").onclick = () => openTalentDialog("rem", id);
-      document.getElementById("btn-del").onclick = () => {
-        if (confirm(`Remover ${p.nome}?`)) { Store.removeParticipante(id); toast.success("Removido"); navigate("/app"); }
+
+      // Configura os botões de acordo com o estado atual da presença
+      if (jaPresente) {
+        document.getElementById("btn-cancelar-presenca").onclick = async () => {
+          if (confirm("Deseja realmente cancelar a presença de hoje e estornar 1 talento?")) {
+            const r = await Store.cancelarPresenca(id);
+            r.ok ? toast.success(r.msg) : toast.warning(r.msg);
+            // Atualiza o cache local antes de redesenhar a tela
+            await Store.sync();
+            viewPerfil(id);
+          }
+        };
+      } else {
+        document.getElementById("btn-presenca").onclick = async () => {
+          const r = await Store.registrarPresenca(id);
+          r.ok ? toast.success(r.msg) : toast.warning(r.msg);
+          await Store.sync();
+          viewPerfil(id);
+        };
+      }
+
+      document.getElementById("btn-add").onclick = () => openTalentDialog("add", id, () => viewPerfil(id));
+      document.getElementById("btn-rem").onclick = () => openTalentDialog("rem", id, () => viewPerfil(id));
+      
+      document.getElementById("btn-del").onclick = async () => {
+        if (confirm(`Remover ${p.nome}?`)) { 
+          await Store.removeParticipante(id); 
+          toast.success("Removido"); 
+          navigate("/app"); 
+        }
       };
     }
   }
 
-  function openTalentDialog(tone, id) {
+  function openTalentDialog(tone, id, onComplete) {
     const isAdd = tone === "add";
     const title = isAdd ? "Adicionar Talentos" : "Remover Talentos";
     const defaultMotivo = isAdd ? "Participação" : "Ajuste";
@@ -554,21 +741,38 @@
         <button class="btn btn-md ${isAdd ? "" : "btn-destructive"}" id="td-confirm">Confirmar</button>
       </div>
     `, (modal) => {
-      modal.querySelector("#td-confirm").onclick = () => {
+      modal.querySelector("#td-confirm").onclick = async () => {
         const n = parseInt(modal.querySelector("#td-qtd").value, 10);
         if (!n || n < 1) return toast.error("Quantidade inválida");
         const motivo = modal.querySelector("#td-motivo").value;
-        if (isAdd) { Store.adicionarTalentos(id, n, motivo); toast.success(`+${n} Talentos adicionados`); }
-        else { Store.removerTalentos(id, n, motivo); toast.success(`-${n} Talentos removidos`); }
-        closeModal(); render();
+        if (isAdd) { 
+          await Store.adicionarTalentos(id, n, motivo); 
+          toast.success(`+${n} Talentos adicionados`); 
+        } else { 
+          await Store.removerTalentos(id, n, motivo); 
+          toast.success(`-${n} Talentos removidos`); 
+        }
+        closeModal(); 
+        if (onComplete) {
+          await Store.sync();
+          onComplete();
+        } else {
+          render();
+        }
       };
     });
   }
 
   // ============ Router dispatcher ============
-  function render() {
+  async function render() {
     const path = parseRoute();
     closeModal();
+    
+    // Sincroniza com Firebase se estiver navegando pelo app
+    if (path !== "/" && path !== "") {
+      await Store.sync();
+    }
+
     if (path === "/" || path === "") return renderLanding();
     if (path === "/app" || path === "/app/") return viewInicio();
     if (path === "/app/membros") return viewMembros();

@@ -10,7 +10,6 @@ import {
   deleteDoc,
   runTransaction 
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-// 1. IMPORTA O MÓDULO DE AUTENTICAÇÃO:
 import { 
   getAuth, 
   signInWithEmailAndPassword, 
@@ -29,12 +28,13 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-// 2. INICIALIZA O COFRE DE AUTENTICAÇÃO:
 const auth = getAuth(app);
-
 
 (function () {
   "use strict";
+
+  // Imagem tridimensional estável do saquinho de ouro 3D da Google Noto Emoji
+  const IMG_SAQUINHO = "https://fonts.gstatic.com/s/e/notoemoji/latest/1f4b0/512.png";
 
   // ============ Icons (inline SVG strings) ============
   const ICONS = {
@@ -46,7 +46,6 @@ const auth = getAuth(app);
     users: `<svg class="icon icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
     userPlus: `<svg class="icon icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="11" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></svg>`,
     chart: `<svg class="icon icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="20" y2="10"/><line x1="18" x2="18" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="16"/></svg>`,
-    coins: `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/></svg>`,
     search: `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/></svg>`,
     pencil: `<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>`,
     check: `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>`,
@@ -65,7 +64,6 @@ const auth = getAuth(app);
 
   const todayStr = () => new Date().toISOString().slice(0, 10);
 
-  // Cache em memória (ADMIN_PASS removido daqui!)
   let state = {
     participantes: [],
     presencas: [],
@@ -73,14 +71,12 @@ const auth = getAuth(app);
     isAdmin: false, 
   };
 
-  // Escuta em tempo real se o usuário está logado no Firebase ou não
   onAuthStateChanged(auth, (user) => {
     state.isAdmin = !!user;
-    // Força a renderização da tela atual para se adaptar ao novo estado de login
     if (typeof render === "function") render();
   });
 
-  // ============ Store (Sincronizado com Firebase Auth) ============
+  // ============ Store ============
   const Store = {
     get: () => state,
     
@@ -100,7 +96,6 @@ const auth = getAuth(app);
       }
     },
 
-    // Realiza o login real no Firebase usando e-mail e senha
     async login(email, senha) {
       try {
         await signInWithEmailAndPassword(auth, email, senha);
@@ -116,7 +111,6 @@ const auth = getAuth(app);
       }
     },
 
-    // Faz o logout real no Firebase
     async logout() { 
       await signOut(auth);
     },
@@ -179,7 +173,6 @@ const auth = getAuth(app);
       }
     },
 
-    // 🔄 NOVA FUNÇÃO PARA CANCELAR A PRESENÇA DO DIA
     async cancelarPresenca(id) {
       const d = todayStr();
       const presencaHoje = state.presencas.find((p) => p.participanteId === id && p.data === d);
@@ -194,15 +187,12 @@ const auth = getAuth(app);
           const pDoc = await transaction.get(pRef);
           if (!pDoc.exists()) throw "Participante não existe!";
 
-          // Remove 1 talento que havia sido ganho pela presença
           const novosTalentos = Math.max(0, (pDoc.data().talentos || 0) - 1);
           transaction.update(pRef, { talentos: novosTalentos });
 
-          // Deleta o registro de presença do dia de hoje
           const presencaRef = doc(db, "presencas", presencaHoje.id);
           transaction.delete(presencaRef);
 
-          // Registra o estorno no histórico de movimentações
           const novaMovRef = doc(collection(db, "movimentacoes"));
           transaction.set(novaMovRef, {
             participanteId: id,
@@ -316,7 +306,7 @@ const auth = getAuth(app);
     app.innerHTML = `
       <div class="landing">
         <div class="landing-inner">
-          <img src="logo-ad.jpg" alt="Logo Assembleia de Deus Missão 1203" class="logo" />
+          <img src="logo-ad.jpg" alt="Logo" class="logo" />
           <div>
             <h1>ASSEMBLEIA DE DEUS</h1>
             <p class="subtitle"><strong>MISSÃO 1203 — EBD Digital</strong></p>
@@ -357,7 +347,6 @@ const auth = getAuth(app);
         if (!senha) return toast.error("Digite a senha.");
         
         toast("Autenticando...");
-        // Envia o e-mail fixo oculto + a senha digitada
         const r = await Store.login(emailFixo, senha);
         
         if (r.ok) {
@@ -375,6 +364,7 @@ const auth = getAuth(app);
     });
   }
 
+  // 🎨 SHELL ATUALIZADO: Ícone de Início aponta para a raiz '/' e pílula azul aplicada
   function renderAppShell(currentPath, contentHTML) {
     const isAdmin = Store.get().isAdmin;
     const items = [
@@ -385,8 +375,22 @@ const auth = getAuth(app);
     items.push({ to: "/app/relatorios", label: "Relatórios", icon: ICONS.chart });
 
     const nav = items.map((it) => {
-      const active = it.to === "/" ? currentPath === "/" : currentPath.startsWith(it.to);
-      return `<a href="#${it.to}" class="${active ? "active" : ""}">${it.icon}<span>${it.label}</span></a>`;
+      const isHomeActive = (it.to === "/" && (currentPath === "/" || currentPath === ""));
+      const isMembrosActive = (it.to === "/app/membros" && (currentPath === "/app/membros" || currentPath === "/app"));
+      const isOtherActive = (it.to !== "/" && it.to !== "/app/membros" && currentPath.startsWith(it.to));
+      
+      const active = isHomeActive || isMembrosActive || isOtherActive;
+
+      const estiloAtivo = active 
+        ? `background-color: rgba(41, 80, 194, 0.12); color: var(--primary) !important; font-weight: 600; border-radius: 12px; padding: 6px 16px;` 
+        : `color: var(--muted-foreground); padding: 6px 16px;`;
+
+      return `
+        <a href="#${it.to}" style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-decoration: none; transition: all 0.2s ease; ${estiloAtivo}">
+          <div style="display: inline-flex; align-items: center; justify-content: center; margin-bottom: 2px;">${it.icon}</div>
+          <span style="font-size: 0.75rem; line-height: 1;">${it.label}</span>
+        </a>
+      `;
     }).join("");
 
     document.getElementById("app").innerHTML = `
@@ -401,8 +405,8 @@ const auth = getAuth(app);
           </div>
         </header>
         <main class="app-main">${contentHTML}</main>
-        <nav class="bottom-nav">
-          <div class="bottom-nav-inner" style="grid-template-columns: repeat(${items.length}, minmax(0,1fr));">${nav}</div>
+        <nav class="bottom-nav" style="background: var(--background); border-top: 1px solid var(--border); padding: 8px 10px 12px;">
+          <div class="bottom-nav-inner" style="display: grid; grid-template-columns: repeat(${items.length}, minmax(0,1fr)); gap: 4px; align-items: center;">${nav}</div>
         </nav>
       </div>
     `;
@@ -411,128 +415,140 @@ const auth = getAuth(app);
   function memberCardHTML(p, isAdmin) {
     const hoje = todayStr();
     const jaPresente = Store.get().presencas.some((x) => x.participanteId === p.id && x.data === hoje);
+    
     if (!isAdmin) {
       return `
-        <div class="member-card card">
+        <div class="member-card card link-perfil-card" data-id="${p.id}" style="cursor: pointer;">
           <div class="member-head">
             <div style="min-width:0;">
               <h3 class="member-name">${escapeHtml(p.nome)}</h3>
               ${p.classe ? `<p class="member-class">${escapeHtml(p.classe)}</p>` : ""}
             </div>
-            <span class="talent-badge"><span>💰</span> ${p.talentos}</span>
-          </div>
-          <div class="member-actions">
-            <a class="btn btn-outline" href="#/app/participante/${p.id}">Ver Perfil</a>
+            <span class="talent-badge">
+              <img src="${IMG_SAQUINHO}" alt="💰" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 4px;" />
+              <span>${p.talentos}</span>
+            </span>
           </div>
         </div>`;
     }
+    
     return `
       <div class="member-card card">
-        <div class="member-head">
-          <div style="min-width:0;">
+        <div class="member-head link-perfil-card" data-id="${p.id}" style="cursor: pointer; width: 100%;">
+          <div style="min-width:0; flex: 1;">
             <h3 class="member-name">${escapeHtml(p.nome)}</h3>
             ${p.classe ? `<p class="member-class">${escapeHtml(p.classe)}</p>` : ""}
           </div>
-          <span class="talent-badge"><span>💰</span> ${p.talentos}</span>
+          <span class="talent-badge">
+            <img src="${IMG_SAQUINHO}" alt="💰" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 4px;" />
+            <span>${p.talentos}</span>
+          </span>
         </div>
-        <div class="member-actions">
+        <div class="member-actions" style="margin-top: 0.5rem;">
           <button class="btn ${jaPresente ? "btn-success" : ""}" data-presenca="${p.id}" ${jaPresente ? "disabled" : ""}>
             ${ICONS.check} ${jaPresente ? "Presença Confirmada" : "Presença"}
           </button>
-          <a class="btn btn-outline-danger btn-icon" href="#/app/participante/${p.id}" aria-label="Editar">${ICONS.pencil}</a>
+          <button class="btn btn-outline-danger btn-icon btn-editar-card" data-id="${p.id}" aria-label="Editar">${ICONS.pencil}</button>
         </div>
       </div>`;
   }
 
   function attachMemberCardHandlers(container) {
+    // 1. Gerencia o botão de dar presença
     container.querySelectorAll("[data-presenca]").forEach((btn) => {
-      btn.onclick = async () => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
         const r = await Store.registrarPresenca(btn.dataset.presenca);
         r.ok ? toast.success(r.msg) : toast.warning(r.msg);
-        render();
+        
+        const s = Store.get();
+        const filtroQ = (sessionStorage.getItem("q-inicio") || "");
+        const list = s.participantes.filter((p) => p.nome.toLowerCase().includes(filtroQ.toLowerCase()));
+        const listContainer = document.getElementById("list");
+        if (listContainer) {
+          listContainer.innerHTML = list.length === 0 ? `<p class="empty">Nenhum participante encontrado.</p>` : list.map((p) => memberCardHTML(p, s.isAdmin)).join("");
+          attachMemberCardHandlers(listContainer);
+        }
+      };
+    });
+
+    // 2. ⚡ GERENCIA O BOTÃO DO LÁPIS (EDITAR) INTERNAMENTE:
+    container.querySelectorAll(".btn-editar-card").forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation(); // Impede o clique de vazar para o fundo
+        const id = btn.dataset.id;
+        navigate(`/app/participante?id=${id}`); // Chama o navigate com segurança total do escopo
+      };
+    });
+
+    // 3. ⚡ GERENCIA O CLIQUE NO CARD/TEXTO PARA ABRIR O PERFIL:
+    container.querySelectorAll(".link-perfil-card").forEach((elemento) => {
+      elemento.onclick = () => {
+        const id = elemento.dataset.id;
+        navigate(`/app/participante?id=${id}`);
       };
     });
   }
 
+  // ⚡ LÓGICA CORRIGIDA: Renderiza o input de busca uma única vez, blindando o teclado do telemóvel
   function viewInicio() {
     const s = Store.get();
     const filtroQ = (sessionStorage.getItem("q-inicio") || "");
     const totalMembros = s.participantes.length;
     const totalTalentos = s.participantes.reduce((a, b) => a + b.talentos, 0);
-    const list = s.participantes.filter((p) => p.nome.toLowerCase().includes(filtroQ.toLowerCase()));
 
     const html = `
       <div class="row-gap">
         <div class="grid-2">
-          <div class="stat-card"><div class="stat-icon primary">${ICONS.users}</div><div class="stat-value">${totalMembros}</div><div class="stat-label">Membros</div></div>
-          <div class="stat-card"><div class="stat-icon talent">${ICONS.coins}</div><div class="stat-value">${totalTalentos}</div><div class="stat-label">Talentos</div></div>
+          <div class="stat-card">
+            <div class="stat-icon primary">${ICONS.users}</div>
+            <div class="stat-value">${totalMembros}</div>
+            <div class="stat-label">Membros</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon talent" style="background: var(--talent-bg); display: flex; align-items: center; justify-content: center;">
+              <img src="${IMG_SAQUINHO}" alt="💰" style="width: 22px; height: 22px;" />
+            </div>
+            <div class="stat-value">${totalTalentos}</div>
+            <div class="stat-label">Talentos</div>
+          </div>
         </div>
         <div class="search-wrap">
-          <span class="icon-search">${ICONS.search}</span>
-          <input id="q" class="input pl-icon" placeholder="Pesquisar por nome..." value="${escapeHtml(filtroQ)}" />
+          <span class="icon-search" style="position: absolute; top: 50%; left: 0.75rem; transform: translateY(-50%); color: var(--muted-foreground); display: inline-flex;">${ICONS.search}</span>
+          <input id="q" class="input" placeholder="Pesquisar por nome..." value="${escapeHtml(filtroQ)}" style="padding-left: 2.25rem;" autocomplete="off" />
         </div>
-        <div id="list" class="row-gap">
-          ${list.length === 0 ? `<p class="empty">Nenhum participante encontrado.</p>` : list.map((p) => memberCardHTML(p, s.isAdmin)).join("")}
-        </div>
+        <div id="list" class="row-gap"></div>
       </div>
     `;
-    renderAppShell("/app", html);
+    
+    const rotaAtiva = parseRoute().startsWith("/app/membros") ? "/app/membros" : "/app";
+    renderAppShell(rotaAtiva, html);
+
     const q = document.getElementById("q");
-    q.oninput = () => { sessionStorage.setItem("q-inicio", q.value); render(); q.focus(); q.setSelectionRange(q.value.length, q.value.length); };
-    attachMemberCardHandlers(document);
-  }
+    const listContainer = document.getElementById("list");
 
-  function viewMembros() {
-    renderAppShell("/app/membros", `
-      <div class="row-gap">
-        <div class="search-wrap">
-          <span class="icon-search" style="position: absolute; top: 50%; left: 0.75rem; transform: translateY(-50%); color: var(--muted-foreground);">${ICONS.search}</span>
-          <input id="search-input" type="text" class="input" placeholder="Pesquisar..." autocomplete="off" style="padding-left: 2.25rem;" />
-        </div>
+    const renderizarListaFiltrada = () => {
+      const termo = q.value.toLowerCase().trim();
+      const filtrados = s.participantes.filter((p) => p.nome.toLowerCase().includes(termo));
+
+      listContainer.innerHTML = filtrados.length === 0 
+        ? `<p class="empty">Nenhum participante encontrado.</p>` 
+        : filtrados.map((p) => memberCardHTML(p, s.isAdmin)).join("");
         
-        <div class="member-list">
-          <div id="lista-membros-container" style="display: contents;"></div>
-        </div>
-      </div>
-    `);
-
-    const searchInput = document.getElementById("search-input");
-    const container = document.getElementById("lista-membros-container");
-
-    const filtrarEGRenderizarLayoutOriginal = () => {
-      const termo = searchInput.value.toLowerCase().trim();
-      const s = Store.get();
-      
-      const filtrados = s.participantes.filter(p => 
-        p.nome.toLowerCase().includes(termo)
-      );
-
-      if (filtrados.length === 0) {
-        container.innerHTML = `<p class="empty">Sem resultados.</p>`;
-        return;
-      }
-
-      // 🎨 RENDERIZAÇÃO PERFEITA:
-      // Usamos a classe .row (do seu CSS) em vez de .card para os membros grudarem com a linha divisória sutil
-      container.innerHTML = filtrados.map(p => `
-        <div class="row" onclick="navigate('/app/participante?id=${p.id}')" style="cursor: pointer;">
-          <div>
-            <div class="nm">${escapeHtml(p.nome)}</div>
-            <div class="cl">${escapeHtml(p.classe || "Adultos")}</div>
-          </div>
-          <div class="talent-badge">
-            <span>💰</span>
-            <span>${p.talentos}</span>
-          </div>
-        </div>
-      `).join("");
+      attachMemberCardHandlers(listContainer);
     };
 
-    // Inicializa a lista
-    filtrarEGRenderizarLayoutOriginal();
+    renderizarListaFiltrada();
 
-    // Mantém o input intacto e o teclado aberto ao digitar
-    searchInput.addEventListener("input", filtrarEGRenderizarLayoutOriginal);
+    q.oninput = () => {
+      sessionStorage.setItem("q-inicio", q.value);
+      renderizarListaFiltrada();
+    };
+  }
+
+  // 🎯 UNIFICAÇÃO DAS ABAS: "Membros" herda nativamente o painel integrado do Início
+  function viewMembros() {
+    viewInicio();
   }
 
   function viewCadastro() {
@@ -543,7 +559,7 @@ const auth = getAuth(app);
         <form id="form-cad" class="card form-card">
           <div class="field">
             <label for="nome">Nome Completo *</label>
-            <input id="nome" class="input" placeholder="Ex: Maria Souza" />
+            <input id="nome" class="input" placeholder="Ex: Maria Souza" autocomplete="off" />
           </div>
           <div class="field">
             <label>Classe EBD <span class="muted">(Opcional)</span></label>
@@ -553,7 +569,12 @@ const auth = getAuth(app);
             </select>
           </div>
           <div class="field">
-            <label for="talentos"><span class="label-talent-icon"><span>💰</span></span>Talentos iniciais <span class="muted">(Opcional)</span></label>
+            <label for="talentos">
+              <span class="label-talent-icon" style="display: inline-flex; align-items: center; justify-content: center; background: rgba(242,201,76,0.2); width: 24px; height: 24px; border-radius: 50%; margin-right: 4px;">
+                <img src="${IMG_SAQUINHO}" alt="💰" style="width: 14px; height: 14px; vertical-align: middle;" />
+              </span>
+              Talentos iniciais <span class="muted">(Opcional)</span>
+            </label>
             <input id="talentos" type="number" min="0" class="input field-talent" placeholder="0" />
           </div>
           <button type="submit" class="btn btn-md">${ICONS.save} Salvar</button>
@@ -580,8 +601,18 @@ const auth = getAuth(app);
       <div class="row-gap">
         <div class="title-row">${ICONS.chart}<h1 class="section-title">Relatórios</h1></div>
         <div class="grid-2">
-          <div class="stat-card"><div class="stat-icon talent"><span>💰</span></div><div class="stat-value">${totalTal}</div><div class="stat-label">Talentos</div></div>
-          <div class="stat-card"><div class="stat-icon flame">${ICONS.users}</div><div class="stat-value">${s.participantes.length}</div><div class="stat-label">Membros</div></div>
+          <div class="stat-card">
+            <div class="stat-icon talent" style="background: var(--talent-bg); display: flex; align-items: center; justify-content: center;">
+              <img src="${IMG_SAQUINHO}" alt="💰" style="width: 20px; height: 20px;" />
+            </div>
+            <div class="stat-value">${totalTal}</div>
+            <div class="stat-label">Talentos</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon flame">${ICONS.users}</div>
+            <div class="stat-value">${s.participantes.length}</div>
+            <div class="stat-label">Membros</div>
+          </div>
         </div>
         <div class="card section-card">
           <h2>🏆 Mais Talentos</h2>
@@ -592,7 +623,9 @@ const auth = getAuth(app);
                   <span class="report-pos">${i + 1}</span>
                   <span class="report-name">${escapeHtml(p.nome)}</span>
                 </div>
-                <span class="report-val">${p.talentos} 💰</span>
+                <span class="report-val" style="display: inline-flex; align-items: center; gap: 4px;">
+                  ${p.talentos} <img src="${IMG_SAQUINHO}" alt="💰" style="width: 16px; height: 16px; vertical-align: middle;" />
+                </span>
               </div>`).join("")}
           </div>
         </div>
@@ -609,7 +642,6 @@ const auth = getAuth(app);
     }
     const isAdmin = s.isAdmin;
     
-    // Captura TODAS as movimentações do membro (incluindo as de presença agora)
     const movs = s.movimentacoes.filter((m) => m.participanteId === id);
     const jaPresente = s.presencas.some((x) => x.participanteId === id && x.data === todayStr());
 
@@ -627,7 +659,6 @@ const auth = getAuth(app);
       ${p.classe ? `<span class="classe-pill">${escapeHtml(p.classe)}</span>` : ""}
     `;
 
-    // Se já estiver presente, mostra o botão vermelho de CANCELAR, senão mostra o de REGISTRAR
     const actionsHTML = isAdmin ? `
       <div class="action-block">
         ${jaPresente ? `
@@ -650,7 +681,9 @@ const auth = getAuth(app);
       `<ul>${movs.map((m) => `
         <li class="history-item">
           <div class="history-left">
-            <span class="history-icon">${ICONS.coins}</span>
+            <span class="history-icon" style="display: inline-flex; align-items: center; margin-top: 0.15rem;">
+              <img src="${IMG_SAQUINHO}" alt="💰" style="width: 18px; height: 18px; vertical-align: middle;" />
+            </span>
             <div style="min-width:0;">
               <div class="history-motivo">${escapeHtml(m.motivo)}</div>
               <div class="history-data">${fmtData(m.data)}</div>
@@ -668,7 +701,10 @@ const auth = getAuth(app);
           <div class="avatar">${ICONS.avatar}</div>
           <div>${headHTML}</div>
           <div class="profile-stats">
-            <div class="tn">${ICONS.coins} ${p.talentos}</div>
+            <div class="tn" style="display: inline-flex; align-items: center; gap: 6px; justify-content: center; color: var(--talent-foreground);">
+              <img src="${IMG_SAQUINHO}" alt="💰" style="width: 22px; height: 22px; vertical-align: middle;" />
+              <span>${p.talentos}</span>
+            </div>
             <div class="lb">Talentos</div>
           </div>
         </div>
@@ -684,20 +720,18 @@ const auth = getAuth(app);
     if (isAdmin) {
       const nomeInp = document.getElementById("edit-nome");
       const pencil = document.getElementById("btn-pencil");
-      let unlocked = false;
-      pencil.onclick = () => { unlocked = true; nomeInp.readOnly = false; nomeInp.classList.add("unlocked"); nomeInp.focus(); nomeInp.setSelectionRange(nomeInp.value.length, nomeInp.value.length); };
+      pencil.onclick = () => { nomeInp.readOnly = false; nomeInp.classList.add("unlocked"); nomeInp.focus(); nomeInp.setSelectionRange(nomeInp.value.length, nomeInp.value.length); };
       
       const salvar = async () => {
         const nv = nomeInp.value.trim();
         if (!nv) { nomeInp.value = p.nome; }
         else if (nv !== p.nome) { 
           await Store.updateParticipante(id, { nome: nv }); 
-          toast.success("Nome updated"); 
-          // Re-sincroniza e redesenha a tela para atualizar o nome no topo
+          toast.success("Nome atualizado"); 
           await Store.sync();
           viewPerfil(id);
         }
-        unlocked = false; nomeInp.readOnly = true; nomeInp.classList.remove("unlocked");
+        nomeInp.readOnly = true; nomeInp.classList.remove("unlocked");
       };
       nomeInp.onblur = salvar;
       nomeInp.onkeydown = (e) => { if (e.key === "Enter") nomeInp.blur(); };
@@ -709,13 +743,11 @@ const auth = getAuth(app);
         viewPerfil(id);
       };
 
-      // Configura os botões de acordo com o estado atual da presença
       if (jaPresente) {
         document.getElementById("btn-cancelar-presenca").onclick = async () => {
           if (confirm("Deseja realmente cancelar a presença de hoje e estornar 1 talento?")) {
             const r = await Store.cancelarPresenca(id);
             r.ok ? toast.success(r.msg) : toast.warning(r.msg);
-            // Atualiza o cache local antes de redesenhar a tela
             await Store.sync();
             viewPerfil(id);
           }
@@ -746,6 +778,7 @@ const auth = getAuth(app);
     const isAdd = tone === "add";
     const title = isAdd ? "Adicionar Talentos" : "Remover Talentos";
     const defaultMotivo = isAdd ? "Participação" : "Ajuste";
+    
     openModal(`
       <div class="modal-title">${title}</div>
       <div class="modal-body">
@@ -785,7 +818,6 @@ const auth = getAuth(app);
     const path = parseRoute();
     closeModal();
     
-    // Sincroniza com Firebase se estiver navegando pelo app
     if (path !== "/" && path !== "") {
       await Store.sync();
     }
@@ -795,8 +827,10 @@ const auth = getAuth(app);
     if (path === "/app/membros") return viewMembros();
     if (path === "/app/cadastro") return viewCadastro();
     if (path === "/app/relatorios") return viewRelatorios();
-    const m = path.match(/^\/app\/participante\/(.+)$/);
-    if (m) return viewPerfil(m[1]);
+    
+    const m = path.match(/^\/app\/participante(?:\?id=(.+))?$/);
+    if (m && m[1]) return viewPerfil(m[1]);
+    
     renderLanding();
   }
 

@@ -1,6 +1,6 @@
 # EBD Digital — AD Missão 1203 (HTML/CSS/JS)
 
-Versão vanilla (HTML + CSS + JavaScript puro) do app EBD Digital.
+Versão inicial (HTML + CSS + JavaScript puro) do app EBD Digital.
 Funciona 100% offline no navegador, sem build, sem dependências.
 
 ## Como rodar
@@ -27,7 +27,7 @@ Depois acesse: http://localhost:8080
 ## Recursos
 
 - Tela inicial com escolha "Sou Participante" / "Sou Administrador"
-- Senha do administrador: **ebd321**
+- Senha do administrador: ****
 - Membros, Cadastro (admin), Relatórios
 - Perfil do participante: editar nome (clique no lápis), classe, registrar presença, adicionar/remover talentos
 - Histórico de movimentações (talentos)

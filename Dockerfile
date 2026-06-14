@@ -1,8 +1,8 @@
 # 1. Usa uma imagem oficial do Python estável
 FROM python:3.10-slim
 
-# 2. Instala TODAS as dependências do sistema que o WeasyPrint exige para compilar PDF
-RUN apt-get update && apt-get install -y --no-install-recommens \
+# 2. Instala TODAS as dependências nativas que o WeasyPrint precisa para gerar o PDF
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     python3-dev \
     python3-pip \
@@ -19,18 +19,18 @@ RUN apt-get update && apt-get install -y --no-install-recommens \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. Define a pasta de trabalho dentro do servidor
+# 3. Define a pasta de trabalho interna
 WORKDIR /app
 
-# 4. Copia as dependências e instala
+# 4. Copia e instala as bibliotecas do Python
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 5. Copia o restante do código do projeto
+# 5. Copia o resto dos arquivos do projeto
 COPY . .
 
-# 6. Define a porta padrão que o Flask vai rodar
+# 6. Expõe a porta padrão do Flask
 EXPOSE 5000
 
-# 7. Comando oficial de inicialização usando o Gunicorn
+# 7. Comando definitivo para inicialização do servidor
 CMD ["gunicorn", "-b", "0.0.0.0:5000", "server:app"]

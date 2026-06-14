@@ -36,7 +36,7 @@ const auth = getAuth(app);
   const IMG_SAQUINHO = "https://fonts.gstatic.com/s/e/notoemoji/latest/1f4b0/512.png";
   
   // 🚀 COLOQUE O LINK DO SEU SERVIDOR DO RENDER AQUI NESTA LINHA:
-  const URL_BACKEND_EMAIL = "https://SEU-PROJETO.onrender.com/api/enviar-relatorio"; 
+  const URL_BACKEND_EMAIL = "https://ebd-digital-api.onrender.com/api/enviar-relatorio"; 
 
   let timerRelatorioEmail = null;
 

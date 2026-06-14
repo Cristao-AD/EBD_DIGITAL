@@ -1,8 +1,8 @@
-# 1. Usa uma imagem oficial do Python estável
+# 1. Usa uma imagem oficial do Python estável e leve
 FROM python:3.10-slim
 
-# 2. Instala TODAS as dependências nativas que o WeasyPrint precisa para gerar o PDF
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# 2. Atualiza os repositórios com comandos de segurança contra falhas de rede e instala pacotes
+RUN apt-get update --fix-missing && apt-get install -y --no-install-recommends \
     build-essential \
     python3-dev \
     python3-pip \
@@ -19,18 +19,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. Define a pasta de trabalho interna
+# 3. Define o diretório de execução interno
 WORKDIR /app
 
-# 4. Copia e instala as bibliotecas do Python
+# 4. Copia e instala primeiro os pacotes Python (otimiza o cache do Render)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 5. Copia o resto dos arquivos do projeto
+# 5. Copia o restante dos arquivos do projeto
 COPY . .
 
-# 6. Expõe a porta padrão do Flask
+# 6. Abre a porta de comunicação do Flask
 EXPOSE 5000
 
-# 7. Comando definitivo para inicialização do servidor
+# 7. Comando estável para rodar o Gunicorn em produção
 CMD ["gunicorn", "-b", "0.0.0.0:5000", "server:app"]

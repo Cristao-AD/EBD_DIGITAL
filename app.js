@@ -1,4 +1,4 @@
-/* EBD Digital - Vanilla JS app com Firebase Auth */
+/* EBD Digital - Vanilla JS app com Firebase Auth & Relatórios PDF */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { 
   getFirestore, 
@@ -33,8 +33,12 @@ const auth = getAuth(app);
 (function () {
   "use strict";
 
-  // Imagem tridimensional estável do saquinho de ouro 3D da Google Noto Emoji
   const IMG_SAQUINHO = "https://fonts.gstatic.com/s/e/notoemoji/latest/1f4b0/512.png";
+  
+  // 🚀 COLOQUE O LINK DO SEU SERVIDOR DO RENDER AQUI NESTA LINHA:
+  const URL_BACKEND_EMAIL = "https://SEU-PROJETO.onrender.com/api/enviar-relatorio"; 
+
+  let timerRelatorioEmail = null;
 
   // ============ Icons (inline SVG strings) ============
   const ICONS = {
@@ -52,11 +56,10 @@ const auth = getAuth(app);
     plus: `<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>`,
     minus: `<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg>`,
     arrowLeft: `<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>`,
-    history: `<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>`,
     trash: `<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
     avatar: `<svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
     save: `<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>`,
-    trophy: `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>`,
+    mail: `<svg class="icon icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>`
   };
 
   const CLASSES = ["Crianças", "Jovens", "Adultos"];
@@ -76,7 +79,7 @@ const auth = getAuth(app);
     if (typeof render === "function") render();
   });
 
-  // ============ Store ============
+  // ============ Store (Gerenciamento de Dados) ============
   const Store = {
     get: () => state,
     
@@ -96,18 +99,16 @@ const auth = getAuth(app);
       }
     },
 
+    getContagemPresencas(membroId) {
+      return state.presencas.filter(p => p.participanteId === membroId).length;
+    },
+
     async login(email, senha) {
       try {
         await signInWithEmailAndPassword(auth, email, senha);
         return { ok: true };
       } catch (error) {
-        let msg = "Erro ao fazer login.";
-        if (error.code === "auth/wrong-password" || error.code === "auth/user-not-found" || error.code === "auth/invalid-credential") {
-          msg = "E-mail ou senha incorretos.";
-        } else if (error.code === "auth/invalid-email") {
-          msg = "Formato de e-mail inválido.";
-        }
-        return { ok: false, msg };
+        return { ok: false, msg: "E-mail ou senha incorretos." };
       }
     },
 
@@ -122,7 +123,13 @@ const auth = getAuth(app);
         talentos: p.talentos || 0,
         criadoEm: new Date().toISOString()
       };
-      await addDoc(collection(db, "participantes"), novo);
+      const docRef = await addDoc(collection(db, "participantes"), novo);
+      
+      if (p.presencasIniciais && p.presencasIniciais > 0) {
+        for (let i = 0; i < p.presencasIniciais; i++) {
+          await addDoc(collection(db, "presencas"), { participanteId: docRef.id, data: `antigo-registro-${i}` });
+        }
+      }
       await this.sync();
     },
 
@@ -167,6 +174,7 @@ const auth = getAuth(app);
         });
 
         await this.sync();
+        this.agendarEnvioRelatorioAutomatico(); // 👈 Cronômetro inteligente ativado
         return { ok: true, msg: "Presença registrada! +1 Talento Digital." };
       } catch (e) {
         return { ok: false, msg: "Erro ao registrar: " + e };
@@ -211,13 +219,28 @@ const auth = getAuth(app);
       }
     },
 
+    async alterarContagemPresencasManual(id, qtd, acao) {
+      try {
+        if (acao === "add") {
+          for (let i = 0; i < qtd; i++) {
+            await addDoc(collection(db, "presencas"), { participanteId: id, data: `manual-ajuste-${Date.now()}-${i}` });
+          }
+        } else {
+          const docsAtuais = state.presencas.filter(p => p.participanteId === id).slice(0, qtd);
+          for (const docP of docsAtuais) {
+            await deleteDoc(doc(db, "presencas", docP.id));
+          }
+        }
+        await this.sync();
+      } catch(e) { console.error(e); }
+    },
+
     async adicionarTalentos(id, qtd, motivo) {
       try {
         await runTransaction(db, async (transaction) => {
           const pRef = doc(db, "participantes", id);
           const pDoc = await transaction.get(pRef);
           const novosTalentos = (pDoc.data().talentos || 0) + qtd;
-          
           transaction.update(pRef, { talentos: novosTalentos });
           
           const novaMovRef = doc(collection(db, "movimentacoes"));
@@ -240,7 +263,6 @@ const auth = getAuth(app);
           const pRef = doc(db, "participantes", id);
           const pDoc = await transaction.get(pRef);
           const novosTalentos = Math.max(0, (pDoc.data().talentos || 0) - qtd);
-          
           transaction.update(pRef, { talentos: novosTalentos });
           
           const novaMovRef = doc(collection(db, "movimentacoes"));
@@ -256,6 +278,45 @@ const auth = getAuth(app);
         await this.sync();
       } catch (e) { console.error(e); }
     },
+
+    // ⏱️ GESTÃO DE AGENDAMENTO AUTOMÁTICO (Reseta e agenda 1h de espera após cada chamada)
+    agendarEnvioRelatorioAutomatico() {
+      if (timerRelatorioEmail) {
+        clearTimeout(timerRelatorioEmail);
+      }
+      console.log("Chamada efetuada. Relatório em background agendado para rodar em 1 hora.");
+      timerRelatorioEmail = setTimeout(async () => {
+        await this.dispararEmailRelatorio(true);
+      }, 3600000); 
+    },
+
+    // 📧 FUNÇÃO INTEGRADA DE ENVIO (Aceita gatilho manual via botão ou automático de 1h)
+    async dispararEmailRelatorio(isAutomatico = false) {
+      if (!isAutomatico) toast("Enviando relatório para o e-mail...");
+      
+      const payload = state.participantes.map(m => ({
+        nome: m.nome,
+        talentos: m.talentos,
+        presencas: this.getContagemPresencas(m.id)
+      }));
+
+      try {
+        const response = await fetch(URL_BACKEND_EMAIL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email_destino: "danilolex5@gmail.com", dados: payload })
+        });
+
+        if (response.ok) {
+          if (!isAutomatico) toast.success("Relatório enviado com sucesso!");
+        } else {
+          if (!isAutomatico) toast.warning("Verifique a configuração SMTP no painel do Render.");
+        }
+      } catch (err) {
+        console.error("Falha na comunicação com o Render.");
+        if (!isAutomatico) toast.error("Servidor indisponível. Confira os logs no painel do Render.");
+      }
+    }
   };
 
   // ============ Toast ============
@@ -265,39 +326,25 @@ const auth = getAuth(app);
     t.className = "toast " + type;
     t.textContent = msg;
     c.appendChild(t);
-    setTimeout(() => { t.style.opacity = "0"; t.style.transition = "opacity 0.3s"; }, 2500);
+    setTimeout(() => { t.style.opacity = "0"; }, 2500);
     setTimeout(() => t.remove(), 2900);
   }
   toast.success = (m) => toast(m, "success");
   toast.error = (m) => toast(m, "error");
   toast.warning = (m) => toast(m, "warning");
 
-  // ============ Router (hash-based) ============
-  function parseRoute() {
-    return location.hash.replace(/^#/, "") || "/";
-  }
-  function navigate(path) {
-    location.hash = path;
-  }
+  function parseRoute() { return location.hash.replace(/^#/, "") || "/"; }
+  function navigate(path) { location.hash = path; }
 
   // ============ Modal ============
   function openModal(contentHTML, onMount) {
     const root = document.getElementById("modal-root");
     root.innerHTML = `<div class="modal-overlay" data-close><div class="modal" role="dialog">${contentHTML}</div></div>`;
-    root.querySelector(".modal-overlay").addEventListener("click", (e) => {
-      if (e.target.dataset.close !== undefined) closeModal();
-    });
-    document.addEventListener("keydown", escClose);
+    root.querySelector(".modal-overlay").addEventListener("click", (e) => { if (e.target.dataset.close !== undefined) closeModal(); });
     if (onMount) onMount(root.querySelector(".modal"));
   }
-  function closeModal() {
-    document.getElementById("modal-root").innerHTML = "";
-    document.removeEventListener("keydown", escClose);
-  }
-  function escClose(e) { if (e.key === "Escape") closeModal(); }
+  function closeModal() { document.getElementById("modal-root").innerHTML = ""; }
 
-  // ============ Helpers ============
-  const fmtData = (iso) => new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
   const escapeHtml = (s) => String(s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
   // ============ Views ============
@@ -329,42 +376,21 @@ const auth = getAuth(app);
         <label class="label-small">Digite a senha para continuar:</label>
         <div class="password-wrap">
           <input id="adm-pass" type="password" class="input" placeholder="Senha" autofocus />
-          <button class="eye" id="eye-toggle" type="button">${ICONS.eye}</button>
         </div>
         <button class="btn btn-md" id="adm-enter">Entrar</button>
       </div>
     `, (modal) => {
       const inp = modal.querySelector("#adm-pass");
-      const eye = modal.querySelector("#eye-toggle");
-      let show = false;
-      
-      eye.onclick = () => { show = !show; inp.type = show ? "text" : "password"; eye.innerHTML = show ? ICONS.eyeOff : ICONS.eye; };
-      
       const submit = async () => {
-        const emailFixo = "danilolex5@gmail.com";
-        const senha = inp.value;
-        
-        if (!senha) return toast.error("Digite a senha.");
-        
-        toast("Autenticando...");
-        const r = await Store.login(emailFixo, senha);
-        
-        if (r.ok) {
-          closeModal(); 
-          toast.success("Bem-vindo, Administrador(a)!"); 
-          navigate("/app");
-        } else {
-          toast.error(r.msg);
-        }
+        if (!inp.value) return toast.error("Digite a senha.");
+        const r = await Store.login("danilolex5@gmail.com", inp.value);
+        if (r.ok) { closeModal(); toast.success("Bem-vindo!"); navigate("/app"); } 
+        else { toast.error(r.msg); }
       };
-      
       modal.querySelector("#adm-enter").onclick = submit;
-      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
-      setTimeout(() => inp.focus(), 50);
     });
   }
 
-  // 🎨 SHELL ATUALIZADO: Ícone de Início aponta para a raiz '/' e pílula azul aplicada
   function renderAppShell(currentPath, contentHTML) {
     const isAdmin = Store.get().isAdmin;
     const items = [
@@ -372,7 +398,7 @@ const auth = getAuth(app);
       { to: "/app/membros", label: "Membros", icon: ICONS.users },
     ];
     if (isAdmin) items.push({ to: "/app/cadastro", label: "Cadastro", icon: ICONS.userPlus });
-    items.push({ to: "/app/relatorios", label: "Relatórios", icon: ICONS.chart });
+    items.push({ to: "/app/relatorios", label: "Relatório", icon: ICONS.chart });
 
     const nav = items.map((it) => {
       const isHomeActive = (it.to === "/" && (currentPath === "/" || currentPath === ""));
@@ -386,7 +412,7 @@ const auth = getAuth(app);
         : `color: var(--muted-foreground); padding: 6px 16px;`;
 
       return `
-        <a href="#${it.to}" style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-decoration: none; transition: all 0.2s ease; ${estiloAtivo}">
+        <a href="#${it.to}" style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-decoration: none; ${estiloAtivo}">
           <div style="display: inline-flex; align-items: center; justify-content: center; margin-bottom: 2px;">${it.icon}</div>
           <span style="font-size: 0.75rem; line-height: 1;">${it.label}</span>
         </a>
@@ -415,7 +441,21 @@ const auth = getAuth(app);
   function memberCardHTML(p, isAdmin) {
     const hoje = todayStr();
     const jaPresente = Store.get().presencas.some((x) => x.participanteId === p.id && x.data === hoje);
+    const totalPresencas = Store.getContagemPresencas(p.id);
     
+    const badgeHTML = `
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <span class="talent-badge" style="background: #e7edff; color: var(--primary); display: inline-flex; align-items: center; gap: 4px; padding: 0.3rem 0.6rem;">
+          <span style="display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; color: var(--primary); stroke-width: 2.5;">${ICONS.user}</span>
+          <span>${totalPresencas}</span>
+        </span>
+        <span class="talent-badge">
+          <img src="${IMG_SAQUINHO}" alt="💰" style="width: 14px; height: 14px; margin-right: 3px;" />
+          <span>${p.talentos}</span>
+        </span>
+      </div>
+    `;
+
     if (!isAdmin) {
       return `
         <div class="member-card card link-perfil-card" data-id="${p.id}" style="cursor: pointer;">
@@ -424,10 +464,7 @@ const auth = getAuth(app);
               <h3 class="member-name">${escapeHtml(p.nome)}</h3>
               ${p.classe ? `<p class="member-class">${escapeHtml(p.classe)}</p>` : ""}
             </div>
-            <span class="talent-badge">
-              <img src="${IMG_SAQUINHO}" alt="💰" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 4px;" />
-              <span>${p.talentos}</span>
-            </span>
+            ${badgeHTML}
           </div>
         </div>`;
     }
@@ -439,10 +476,7 @@ const auth = getAuth(app);
             <h3 class="member-name">${escapeHtml(p.nome)}</h3>
             ${p.classe ? `<p class="member-class">${escapeHtml(p.classe)}</p>` : ""}
           </div>
-          <span class="talent-badge">
-            <img src="${IMG_SAQUINHO}" alt="💰" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 4px;" />
-            <span>${p.talentos}</span>
-          </span>
+          ${badgeHTML}
         </div>
         <div class="member-actions" style="margin-top: 0.5rem;">
           <button class="btn ${jaPresente ? "btn-success" : ""}" data-presenca="${p.id}" ${jaPresente ? "disabled" : ""}>
@@ -454,43 +488,28 @@ const auth = getAuth(app);
   }
 
   function attachMemberCardHandlers(container) {
-    // 1. Gerencia o botão de dar presença
     container.querySelectorAll("[data-presenca]").forEach((btn) => {
       btn.onclick = async (e) => {
         e.stopPropagation();
         const r = await Store.registrarPresenca(btn.dataset.presenca);
-        r.ok ? toast.success(r.msg) : toast.warning(r.msg);
-        
-        const s = Store.get();
-        const filtroQ = (sessionStorage.getItem("q-inicio") || "");
-        const list = s.participantes.filter((p) => p.nome.toLowerCase().includes(filtroQ.toLowerCase()));
-        const listContainer = document.getElementById("list");
-        if (listContainer) {
-          listContainer.innerHTML = list.length === 0 ? `<p class="empty">Nenhum participante encontrado.</p>` : list.map((p) => memberCardHTML(p, s.isAdmin)).join("");
-          attachMemberCardHandlers(listContainer);
+        if (r.ok) {
+          toast.success(r.msg);
+        } else {
+          toast.warning(r.msg);
         }
+        viewInicio();
       };
     });
 
-    // 2. ⚡ GERENCIA O BOTÃO DO LÁPIS (EDITAR) INTERNAMENTE:
     container.querySelectorAll(".btn-editar-card").forEach((btn) => {
-      btn.onclick = (e) => {
-        e.stopPropagation(); // Impede o clique de vazar para o fundo
-        const id = btn.dataset.id;
-        navigate(`/app/participante?id=${id}`); // Chama o navigate com segurança total do escopo
-      };
+      btn.onclick = (e) => { e.stopPropagation(); navigate(`/app/participante?id=${btn.dataset.id}`); };
     });
 
-    // 3. ⚡ GERENCIA O CLIQUE NO CARD/TEXTO PARA ABRIR O PERFIL:
     container.querySelectorAll(".link-perfil-card").forEach((elemento) => {
-      elemento.onclick = () => {
-        const id = elemento.dataset.id;
-        navigate(`/app/participante?id=${id}`);
-      };
+      elemento.onclick = () => { navigate(`/app/participante?id=${elemento.dataset.id}`); };
     });
   }
 
-  // ⚡ LÓGICA CORRIGIDA: Renderiza o input de busca uma única vez, blindando o teclado do telemóvel
   function viewInicio() {
     const s = Store.get();
     const filtroQ = (sessionStorage.getItem("q-inicio") || "");
@@ -510,9 +529,12 @@ const auth = getAuth(app);
               <img src="${IMG_SAQUINHO}" alt="💰" style="width: 22px; height: 22px;" />
             </div>
             <div class="stat-value">${totalTalentos}</div>
-            <div class="stat-label">Talentos</div>
+            <div class="stat-label">Talentos Geral</div>
           </div>
         </div>
+        
+        ${s.isAdmin ? `<button id="btn-disparar-email-instantneo" class="btn btn-outline" style="gap:8px; justify-content:center; border-color:var(--primary); color:var(--primary); font-weight:700;">${ICONS.mail} Disparar PDF para o E-mail</button>` : ""}
+
         <div class="search-wrap">
           <span class="icon-search" style="position: absolute; top: 50%; left: 0.75rem; transform: translateY(-50%); color: var(--muted-foreground); display: inline-flex;">${ICONS.search}</span>
           <input id="q" class="input" placeholder="Pesquisar por nome..." value="${escapeHtml(filtroQ)}" style="padding-left: 2.25rem;" autocomplete="off" />
@@ -521,8 +543,11 @@ const auth = getAuth(app);
       </div>
     `;
     
-    const rotaAtiva = parseRoute().startsWith("/app/membros") ? "/app/membros" : "/app";
-    renderAppShell(rotaAtiva, html);
+    renderAppShell(parseRoute().startsWith("/app/membros") ? "/app/membros" : "/app", html);
+
+    if (s.isAdmin) {
+      document.getElementById("btn-disparar-email-instantneo").onclick = () => Store.dispararEmailRelatorio(false);
+    }
 
     const q = document.getElementById("q");
     const listContainer = document.getElementById("list");
@@ -530,26 +555,15 @@ const auth = getAuth(app);
     const renderizarListaFiltrada = () => {
       const termo = q.value.toLowerCase().trim();
       const filtrados = s.participantes.filter((p) => p.nome.toLowerCase().includes(termo));
-
-      listContainer.innerHTML = filtrados.length === 0 
-        ? `<p class="empty">Nenhum participante encontrado.</p>` 
-        : filtrados.map((p) => memberCardHTML(p, s.isAdmin)).join("");
-        
+      listContainer.innerHTML = filtrados.length === 0 ? `<p class="empty">Nenhum participante encontrado.</p>` : filtrados.map((p) => memberCardHTML(p, s.isAdmin)).join("");
       attachMemberCardHandlers(listContainer);
     };
 
     renderizarListaFiltrada();
-
-    q.oninput = () => {
-      sessionStorage.setItem("q-inicio", q.value);
-      renderizarListaFiltrada();
-    };
+    q.oninput = () => { sessionStorage.setItem("q-inicio", q.value); renderizarListaFiltrada(); };
   }
 
-  // 🎯 UNIFICAÇÃO DAS ABAS: "Membros" herda nativamente o painel integrado do Início
-  function viewMembros() {
-    viewInicio();
-  }
+  function viewMembros() { viewInicio(); }
 
   function viewCadastro() {
     if (!Store.get().isAdmin) { navigate("/app/membros"); return; }
@@ -562,20 +576,21 @@ const auth = getAuth(app);
             <input id="nome" class="input" placeholder="Ex: Maria Souza" autocomplete="off" />
           </div>
           <div class="field">
-            <label>Classe EBD <span class="muted">(Opcional)</span></label>
+            <label>Classe EBD</label>
             <select id="classe" class="select">
               <option value="">Selecione...</option>
               ${CLASSES.map((c) => `<option value="${c}">${c}</option>`).join("")}
             </select>
           </div>
-          <div class="field">
-            <label for="talentos">
-              <span class="label-talent-icon" style="display: inline-flex; align-items: center; justify-content: center; background: rgba(242,201,76,0.2); width: 24px; height: 24px; border-radius: 50%; margin-right: 4px;">
-                <img src="${IMG_SAQUINHO}" alt="💰" style="width: 14px; height: 14px; vertical-align: middle;" />
-              </span>
-              Talentos iniciais <span class="muted">(Opcional)</span>
-            </label>
-            <input id="talentos" type="number" min="0" class="input field-talent" placeholder="0" />
+          <div class="grid-2">
+            <div class="field">
+              <label>Talentos Iniciais</label>
+              <input id="talentos" type="number" min="0" value="0" class="input" />
+            </div>
+            <div class="field">
+              <label>Presenças Iniciais</label>
+              <input id="presencas-ini" type="number" min="0" value="0" class="input" />
+            </div>
           </div>
           <button type="submit" class="btn btn-md">${ICONS.save} Salvar</button>
         </form>
@@ -584,65 +599,24 @@ const auth = getAuth(app);
     document.getElementById("form-cad").onsubmit = async (e) => {
       e.preventDefault();
       const nome = document.getElementById("nome").value.trim();
-      if (!nome) return toast.error("Informe o nome completo.");
+      if (!nome) return toast.error("Informe o nome.");
       const classe = document.getElementById("classe").value || undefined;
-      const t = parseInt(document.getElementById("talentos").value, 10);
-      await Store.addParticipante({ nome, classe, talentos: isNaN(t) ? 0 : Math.max(0, t) });
-      toast.success("Participante cadastrado!");
+      const talentos = parseInt(document.getElementById("talentos").value, 10) || 0;
+      const presencasIniciais = parseInt(document.getElementById("presencas-ini").value, 10) || 0;
+      
+      await Store.addParticipante({ nome, classe, talentos, presencasIniciais });
+      toast.success("Membro Cadastrado!");
       navigate("/app");
     };
-  }
-
-  function viewRelatorios() {
-    const s = Store.get();
-    const top = [...s.participantes].sort((a, b) => b.talentos - a.talentos).slice(0, 5);
-    const totalTal = s.participantes.reduce((a, b) => a + b.talentos, 0);
-    renderAppShell("/app/relatorios", `
-      <div class="row-gap">
-        <div class="title-row">${ICONS.chart}<h1 class="section-title">Relatórios</h1></div>
-        <div class="grid-2">
-          <div class="stat-card">
-            <div class="stat-icon talent" style="background: var(--talent-bg); display: flex; align-items: center; justify-content: center;">
-              <img src="${IMG_SAQUINHO}" alt="💰" style="width: 20px; height: 20px;" />
-            </div>
-            <div class="stat-value">${totalTal}</div>
-            <div class="stat-label">Talentos</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon flame">${ICONS.users}</div>
-            <div class="stat-value">${s.participantes.length}</div>
-            <div class="stat-label">Membros</div>
-          </div>
-        </div>
-        <div class="card section-card">
-          <h2>🏆 Mais Talentos</h2>
-          <div>
-            ${top.map((p, i) => `
-              <div class="report-row">
-                <div style="display:flex;align-items:center;gap:0.75rem;min-width:0;">
-                  <span class="report-pos">${i + 1}</span>
-                  <span class="report-name">${escapeHtml(p.nome)}</span>
-                </div>
-                <span class="report-val" style="display: inline-flex; align-items: center; gap: 4px;">
-                  ${p.talentos} <img src="${IMG_SAQUINHO}" alt="💰" style="width: 16px; height: 16px; vertical-align: middle;" />
-                </span>
-              </div>`).join("")}
-          </div>
-        </div>
-      </div>
-    `);
   }
 
   function viewPerfil(id) {
     const s = Store.get();
     const p = s.participantes.find((x) => x.id === id);
-    if (!p) {
-      renderAppShell("/app/participante", `<p class="empty">Não encontrado. <a href="#/app" style="color:var(--primary);text-decoration:underline">Voltar</a></p>`);
-      return;
-    }
-    const isAdmin = s.isAdmin;
+    if (!p) { navigate("/app"); return; }
     
-    const movs = s.movimentacoes.filter((m) => m.participanteId === id);
+    const isAdmin = s.isAdmin;
+    const totalPresencas = Store.getContagemPresencas(id);
     const jaPresente = s.presencas.some((x) => x.participanteId === id && x.data === todayStr());
 
     const headHTML = isAdmin ? `
@@ -660,39 +634,43 @@ const auth = getAuth(app);
     `;
 
     const actionsHTML = isAdmin ? `
-      <div class="action-block">
-        ${jaPresente ? `
-          <button id="btn-cancelar-presenca" class="btn btn-destructive" style="background-color: #dc2626; color: white;">
-            ❌ Cancelar Presença Confirmada
-          </button>
-        ` : `
-          <button id="btn-presenca" class="btn">
-            ${ICONS.check} Registrar Presença (+1 Talento)
-          </button>
-        `}
-        <div class="grid-2" style="margin-top: 10px;">
-          <button id="btn-add" class="btn btn-flame">${ICONS.plus} Adicionar Talentos</button>
-          <button id="btn-rem" class="btn btn-outline-danger">${ICONS.minus} Remover Talentos</button>
+      <div class="action-block" style="display:flex; flex-direction:column; gap:12px;">
+        <div style="background:#f4f5f7; border-radius:12px; padding:12px;">
+          <div style="font-weight:600; margin-bottom:6px; font-size:0.9rem;">Gestão de Presenças</div>
+          ${jaPresente ? `
+            <button id="btn-cancelar-presenca" class="btn btn-destructive" style="background-color: #dc2626; color: white; width:100%;">❌ Cancelar Presença de Hoje</button>
+          ` : `
+            <button id="btn-presenca" class="btn" style="width:100%;">${ICONS.check} Registrar Chamada de Hoje (+1)</button>
+          `}
+        </div>
+
+        <div style="background:#f4f5f7; border-radius:12px; padding:12px;">
+  <div style="font-weight:600; margin-bottom:8px; font-size:0.9rem;">Ajuste de Presenças</div>
+  <div class="grid-2">
+    <button id="btn-add-presencas-lote" class="btn" style="background-color: var(--primary); color: white; font-size:0.85rem; display: flex; align-items: center; justify-content: center; gap: 4px;">
+      ${ICONS.plus} Presenças
+    </button>
+    <button id="btn-rem-presencas-lote" class="btn btn-outline-danger" style="font-size:0.85rem;">
+      ${ICONS.minus} Presenças
+    </button>
+  </div>
+</div>
+
+        <div style="background:#f4f5f7; border-radius:12px; padding:12px;">
+          <div style="font-weight:600; margin-bottom:8px; font-size:0.9rem;">Ajuste de Talentos</div>
+          <div class="grid-2">
+            <button id="btn-add" class="btn btn-flame">${ICONS.plus} Talentos</button>
+            <button id="btn-rem" class="btn btn-outline-danger">${ICONS.minus} Talentos</button>
+          </div>
         </div>
       </div>
     ` : "";
 
-    const movHTML = movs.length === 0 ? `<p class="history-empty">Nenhuma movimentação ainda.</p>` :
-      `<ul>${movs.map((m) => `
-        <li class="history-item">
-          <div class="history-left">
-            <span class="history-icon" style="display: inline-flex; align-items: center; margin-top: 0.15rem;">
-              <img src="${IMG_SAQUINHO}" alt="💰" style="width: 18px; height: 18px; vertical-align: middle;" />
-            </span>
-            <div style="min-width:0;">
-              <div class="history-motivo">${escapeHtml(m.motivo)}</div>
-              <div class="history-data">${fmtData(m.data)}</div>
-            </div>
-          </div>
-          <span class="history-val ${m.tipo === "remocao" ? "rem" : "add"}">${m.tipo === "remocao" ? "-" : "+"}${m.quantidade}</span>
-        </li>`).join("")}</ul>`;
-
-    const deleteHTML = isAdmin ? `<button id="btn-del" class="btn btn-ghost btn-md">${ICONS.trash} Excluir participante</button>` : "";
+    const deleteHTML = isAdmin ? `
+  <button id="btn-del" class="btn btn-md" style="margin-top: 1rem; width: 100%; font-weight: 700; background-color: rgba(220, 38, 38, 0.1); color: #dc2626; border: 1px solid rgba(220, 38, 38, 0.2); gap: 8px; justify-content: center;">
+    ${ICONS.trash} Eliminar membro do sistema
+  </button>
+` : "";
 
     renderAppShell("/app/participante", `
       <div class="row-gap">
@@ -700,127 +678,163 @@ const auth = getAuth(app);
         <div class="card profile-head">
           <div class="avatar">${ICONS.avatar}</div>
           <div>${headHTML}</div>
-          <div class="profile-stats">
-            <div class="tn" style="display: inline-flex; align-items: center; gap: 6px; justify-content: center; color: var(--talent-foreground);">
-              <img src="${IMG_SAQUINHO}" alt="💰" style="width: 22px; height: 22px; vertical-align: middle;" />
-              <span>${p.talentos}</span>
+          
+          <div style="display:flex; justify-content:space-around; width:100%; margin-top:15px; border-top:1px solid var(--border); padding-top:10px;">
+            <div class="profile-stats" style="text-align:center;">
+              <div class="tn" style="color: var(--primary); font-size:1.4rem; font-weight:700; display:inline-flex; align-items:center; gap:4px;">
+                <span style="display:inline-flex; width:16px; height:16px; color:var(--primary); stroke-width:3;">${ICONS.user}</span>
+                <span>${totalPresencas}</span>
+              </div>
+              <div class="lb">Presenças</div>
             </div>
-            <div class="lb">Talentos</div>
+            <div class="profile-stats" style="text-align:center;">
+              <div class="tn" style="color: var(--talent-foreground); font-size:1.4rem; font-weight:700;">
+                <img src="${IMG_SAQUINHO}" alt="💰" style="width: 22px; height: 22px; vertical-align:middle;" /> ${p.talentos}
+              </div>
+              <div class="lb">Talentos</div>
+            </div>
           </div>
         </div>
         ${actionsHTML}
-        <div class="card history-card">
-          <div class="history-head">${ICONS.history}<h2>Histórico de Movimentações</h2></div>
-          ${movHTML}
-        </div>
         ${deleteHTML}
       </div>
     `);
 
     if (isAdmin) {
       const nomeInp = document.getElementById("edit-nome");
-      const pencil = document.getElementById("btn-pencil");
-      pencil.onclick = () => { nomeInp.readOnly = false; nomeInp.classList.add("unlocked"); nomeInp.focus(); nomeInp.setSelectionRange(nomeInp.value.length, nomeInp.value.length); };
-      
-      const salvar = async () => {
-        const nv = nomeInp.value.trim();
-        if (!nv) { nomeInp.value = p.nome; }
-        else if (nv !== p.nome) { 
-          await Store.updateParticipante(id, { nome: nv }); 
-          toast.success("Nome atualizado"); 
-          await Store.sync();
-          viewPerfil(id);
+      document.getElementById("btn-pencil").onclick = () => { nomeInp.readOnly = false; nomeInp.classList.add("unlocked"); nomeInp.focus(); };
+      nomeInp.onblur = async () => {
+        if (nomeInp.value.trim() && nomeInp.value.trim() !== p.nome) {
+          await Store.updateParticipante(id, { nome: nomeInp.value.trim() });
+          toast.success("Nome atualizado!");
         }
         nomeInp.readOnly = true; nomeInp.classList.remove("unlocked");
-      };
-      nomeInp.onblur = salvar;
-      nomeInp.onkeydown = (e) => { if (e.key === "Enter") nomeInp.blur(); };
-      
-      document.getElementById("edit-classe").onchange = async (e) => {
-        await Store.updateParticipante(id, { classe: e.target.value || "" });
-        toast.success("Classe atualizada");
-        await Store.sync();
         viewPerfil(id);
       };
 
-      if (jaPresente) {
-        document.getElementById("btn-cancelar-presenca").onclick = async () => {
-          if (confirm("Deseja realmente cancelar a presença de hoje e estornar 1 talento?")) {
-            const r = await Store.cancelarPresenca(id);
-            r.ok ? toast.success(r.msg) : toast.warning(r.msg);
-            await Store.sync();
-            viewPerfil(id);
-          }
-        };
-      } else {
+      document.getElementById("edit-classe").onchange = async (e) => {
+        await Store.updateParticipante(id, { classe: e.target.value || "" });
+        toast.success("Classe salva!");
+        viewPerfil(id);
+      };
+
+      if (!jaPresente) {
         document.getElementById("btn-presenca").onclick = async () => {
           const r = await Store.registrarPresenca(id);
-          r.ok ? toast.success(r.msg) : toast.warning(r.msg);
-          await Store.sync();
+          if(r.ok) { toast.success(r.msg); }
           viewPerfil(id);
+        };
+      } else {
+        document.getElementById("btn-cancelar-presenca").onclick = async () => {
+          if (confirm("Estornar presença de hoje?")) { await Store.cancelarPresenca(id); viewPerfil(id); }
         };
       }
 
-      document.getElementById("btn-add").onclick = () => openTalentDialog("add", id, () => viewPerfil(id));
-      document.getElementById("btn-rem").onclick = () => openTalentDialog("rem", id, () => viewPerfil(id));
+      document.getElementById("btn-add").onclick = () => openBatchDialog("talentos", "add", id, () => viewPerfil(id));
+      document.getElementById("btn-rem").onclick = () => openBatchDialog("talentos", "rem", id, () => viewPerfil(id));
+      document.getElementById("btn-add-presencas-lote").onclick = () => openBatchDialog("presencas", "add", id, () => viewPerfil(id));
+      document.getElementById("btn-rem-presencas-lote").onclick = () => openBatchDialog("presencas", "rem", id, () => viewPerfil(id));
       
       document.getElementById("btn-del").onclick = async () => {
-        if (confirm(`Remover ${p.nome}?`)) { 
+        if (confirm(`Deseja realmente apagar ${p.nome} definitivamente da EBD?`)) { 
           await Store.removeParticipante(id); 
-          toast.success("Removido"); 
+          toast.success("Membro excluído."); 
           navigate("/app"); 
         }
       };
     }
   }
 
-  function openTalentDialog(tone, id, onComplete) {
-    const isAdd = tone === "add";
-    const title = isAdd ? "Adicionar Talentos" : "Remover Talentos";
-    const defaultMotivo = isAdd ? "Participação" : "Ajuste";
-    
+  function openBatchDialog(alvo, acao, id, onComplete) {
+    const isTalento = alvo === "talentos";
+    const isAdd = acao === "add";
+    const titulo = `${isAdd ? "Adicionar" : "Remover"} ${isTalento ? "Talentos" : "Presenças"}`;
+
     openModal(`
-      <div class="modal-title">${title}</div>
+      <div class="modal-title">${titulo}</div>
       <div class="modal-body">
-        <div class="field"><label>Quantidade</label><input id="td-qtd" type="number" min="1" value="1" class="input" /></div>
-        <div class="field"><label>Motivo</label>
-          <select id="td-motivo" class="select">
-            ${(isAdd ? MOTIVOS : [...MOTIVOS, "Ajuste"]).map((m) => `<option ${m === defaultMotivo ? "selected" : ""}>${m}</option>`).join("")}
-          </select>
+        <div class="field">
+          <label>Quantidade de ${isTalento ? "Talentos" : "Presenças"}</label>
+          <input id="batch-qtd" type="number" min="1" value="1" class="input" />
         </div>
-        <button class="btn btn-md ${isAdd ? "" : "btn-destructive"}" id="td-confirm">Confirmar</button>
+        ${isTalento && isAdd ? `
+        <div class="field"><label>Motivo</label>
+          <select id="batch-motivo" class="select">${MOTIVOS.map(m => `<option>${m}</option>`).join("")}</select>
+        </div>` : ""}
+        <button class="btn btn-md ${isAdd ? "" : "btn-destructive"}" id="batch-confirm">Aplicar Alterações</button>
       </div>
     `, (modal) => {
-      modal.querySelector("#td-confirm").onclick = async () => {
-        const n = parseInt(modal.querySelector("#td-qtd").value, 10);
-        if (!n || n < 1) return toast.error("Quantidade inválida");
-        const motivo = modal.querySelector("#td-motivo").value;
-        if (isAdd) { 
-          await Store.adicionarTalentos(id, n, motivo); 
-          toast.success(`+${n} Talentos adicionados`); 
-        } else { 
-          await Store.removerTalentos(id, n, motivo); 
-          toast.success(`-${n} Talentos removidos`); 
-        }
-        closeModal(); 
-        if (onComplete) {
-          await Store.sync();
-          onComplete();
+      modal.querySelector("#batch-confirm").onclick = async () => {
+        const qtd = parseInt(modal.querySelector("#batch-qtd").value, 10);
+        if (!qtd || qtd < 1) return toast.error("Valor inválido.");
+
+        if (isTalento) {
+          if (isAdd) {
+            const m = modal.querySelector("#batch-motivo").value;
+            await Store.adicionarTalentos(id, qtd, m);
+          } else {
+            await Store.removerTalentos(id, qtd, "Ajuste manual");
+          }
         } else {
-          render();
+          await Store.alterarContagemPresencasManual(id, qtd, acao);
+          toast.success("Contador de presenças atualizado!");
         }
+        
+        closeModal();
+        if (onComplete) onComplete();
       };
     });
+  }
+
+  function viewRelatorios() {
+    const s = Store.get();
+    const totalTal = s.participantes.reduce((a, b) => a + b.talentos, 0);
+    const topCincoMembros = [...s.participantes].sort((a, b) => b.talentos - a.talentos).slice(0, 5);
+
+    renderAppShell("/app/relatorios", `
+      <div class="row-gap">
+        <div class="title-row">${ICONS.chart}<h1 class="section-title">Relatório</h1></div>
+        <div class="grid-2">
+          <div class="stat-card">
+            <div class="stat-icon primary">${ICONS.users}</div>
+            <div class="stat-value">${s.participantes.length}</div>
+            <div class="stat-label">Membros ativos</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon talent" style="background:var(--talent-bg); display:flex; align-items:center; justify-content:center;">
+              <img src="${IMG_SAQUINHO}" alt="💰" style="width:20px; height:20px;"/>
+            </div>
+            <div class="stat-value">${totalTal}</div>
+            <div class="stat-label">Talentos</div>
+          </div>
+        </div>
+
+        <div class="card section-card" style="margin-top: 0.5rem;">
+          <h2 style="font-size:1rem; margin-bottom:12px; font-weight:700; color:var(--foreground);">🏆 Ranking: Top 5 Maiores Talentos</h2>
+          <div class="row-gap" style="gap: 2px;">
+            ${topCincoMembros.map((p, index) => `
+              <div class="report-row" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border);">
+                <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+                  <span class="report-pos" style="background: var(--accent); color: var(--primary); width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700;">${index + 1}</span>
+                  <span class="report-name" style="font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(p.nome)}</span>
+                </div>
+                <span class="report-val" style="display: inline-flex; align-items: center; gap: 4px; font-weight: 700; color: var(--talent-foreground);">
+                  <span>${p.talentos}</span>
+                  <img src="${IMG_SAQUINHO}" alt="💰" style="width: 15px; height: 14px; vertical-align: middle;" />
+                </span>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      </div>
+    `);
   }
 
   // ============ Router dispatcher ============
   async function render() {
     const path = parseRoute();
     closeModal();
-    
-    if (path !== "/" && path !== "") {
-      await Store.sync();
-    }
+    if (path !== "/" && path !== "") await Store.sync();
 
     if (path === "/" || path === "") return renderLanding();
     if (path === "/app" || path === "/app/") return viewInicio();
@@ -830,11 +844,9 @@ const auth = getAuth(app);
     
     const m = path.match(/^\/app\/participante(?:\?id=(.+))?$/);
     if (m && m[1]) return viewPerfil(m[1]);
-    
     renderLanding();
   }
 
   window.addEventListener("hashchange", render);
   window.addEventListener("DOMContentLoaded", render);
-  if (document.readyState !== "loading") render();
 })();
